@@ -101,15 +101,9 @@ body {
 }
 
 .brand-logo {
-  width: 32px;
-  height: 32px;
-  border-radius: 8px;
-  background: linear-gradient(135deg, #8b5cf6, #06b6d4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: bold;
+  width: auto;
+  height: 28px;
+  object-fit: contain;
 }
 
 .brand-name {
@@ -619,17 +613,11 @@ tr:hover td {
 }
 
 .login-logo {
-  width: 48px;
-  height: 48px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #8b5cf6, #06b6d4);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: #fff;
-  font-weight: bold;
-  font-size: 1.4rem;
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
   margin: 0 auto 16px auto;
+  display: block;
 }
 
 .login-card h2 {
@@ -711,3 +699,108 @@ tr:hover td {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
+/* React Calendar Glassmorphism Overrides */
+.react-calendar {
+  width: 100%;
+  max-width: 100%;
+  background: rgba(30, 41, 59, 0.4);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 20px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  font-family: inherit;
+  line-height: 1.125em;
+  padding: 16px;
+  color: #f8fafc;
+}
+.react-calendar__navigation {
+  display: flex;
+  height: 44px;
+  margin-bottom: 1em;
+}
+.react-calendar__navigation button {
+  min-width: 44px;
+  background: none;
+  color: #f8fafc;
+  font-size: 1.1rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.react-calendar__navigation button:disabled {
+  background-color: transparent;
+  color: #64748b;
+}
+.react-calendar__navigation button:enabled:hover,
+.react-calendar__navigation button:enabled:focus {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+.react-calendar__month-view__weekdays {
+  text-align: center;
+  text-transform: uppercase;
+  font-weight: 600;
+  font-size: 0.8rem;
+  color: #94a3b8;
+  margin-bottom: 8px;
+}
+.react-calendar__month-view__weekdays__weekday abbr {
+  text-decoration: none;
+}
+.react-calendar__month-view__days__day {
+  color: #f8fafc;
+}
+.react-calendar__month-view__days__day--neighboringMonth {
+  color: #475569;
+}
+.react-calendar__tile {
+  max-width: 100%;
+  padding: 14px 6.6667%;
+  background: none;
+  text-align: center;
+  line-height: 16px;
+  font-size: 0.95rem;
+  border-radius: 12px;
+  transition: all 0.2s ease;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  border: none;
+  cursor: pointer;
+}
+.react-calendar__tile:disabled {
+  background-color: transparent;
+  color: #475569;
+}
+.react-calendar__tile:enabled:hover,
+.react-calendar__tile:enabled:focus {
+  background: rgba(255, 255, 255, 0.05);
+}
+.react-calendar__tile--now {
+  background: rgba(139, 92, 246, 0.1);
+  font-weight: bold;
+}
+.react-calendar__tile--now:enabled:hover,
+.react-calendar__tile--now:enabled:focus {
+  background: rgba(139, 92, 246, 0.2);
+}
+.react-calendar__tile--active {
+  background: rgba(139, 92, 246, 0.8) !important;
+  color: white;
+  box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+}
+
+/* Status Dots */
+.cal-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  margin: 0 auto;
+}
+.cal-dot.present { background-color: #34d399; box-shadow: 0 0 6px rgba(52, 211, 153, 0.6); }
+.cal-dot.late { background-color: #facc15; box-shadow: 0 0 6px rgba(250, 204, 21, 0.6); }
+.cal-dot.absent { background-color: #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.6); }
+.cal-dot.holiday { background-color: #a855f7; box-shadow: 0 0 6px rgba(168, 85, 247, 0.6); }

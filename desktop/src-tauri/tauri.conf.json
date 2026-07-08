@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "desktop",
-  "version": "0.1.0",
-  "identifier": "com.attendance.desktop",
+  "productName": "Genesoft Attendance",
+  "version": "1.0.0",
+  "identifier": "com.genesoftinfotech.attendance.desktop",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://localhost:1420",
@@ -12,9 +12,9 @@
   "app": {
     "windows": [
       {
-        "title": "desktop",
-        "width": 800,
-        "height": 600
+        "title": "Genesoft Attendance",
+        "width": 1024,
+        "height": 768
       }
     ],
     "security": {

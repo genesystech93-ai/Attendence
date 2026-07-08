@@ -8,7 +8,10 @@ CREATE TABLE public.offices (
     lat DOUBLE PRECISION NOT NULL,
     lng DOUBLE PRECISION NOT NULL,
     geofence_radius DOUBLE PRECISION NOT NULL, -- in meters
-    allowed_wifi_ssids JSONB NOT NULL -- array of strings: ["SSID1", "SSID2"]
+    allowed_wifi_ssids JSONB NOT NULL, -- array of strings: ["SSID1", "SSID2"]
+    shift_start_time TIME NOT NULL DEFAULT '09:30:00',
+    shift_end_time TIME NOT NULL DEFAULT '18:30:00',
+    holidays JSONB NOT NULL DEFAULT '[]'::jsonb -- array of date strings: ["2026-12-25"]
 );
 
 -- 2. Create Users (Profiles) Table
@@ -31,8 +34,32 @@ CREATE TABLE public.attendance_logs (
     check_in_wifi TEXT NOT NULL,
     check_in_location JSONB, -- { "lat": double, "lng": double }
     status TEXT NOT NULL CHECK (status IN ('present', 'late')),
-    duration_minutes INT
+    duration_minutes INT,
+    -- TIME SECURITY: Ensure check_in timestamp is within 30 seconds of
+    -- the database server's transaction time (prevents client clock spoofing)
+    CONSTRAINT check_in_server_time_bound
+        CHECK (check_in >= now() - interval '30 seconds' AND check_in <= now() + interval '30 seconds')
 );
+
+-- TIME SECURITY: Trigger to validate check_out timestamp on update
+CREATE OR REPLACE FUNCTION public.validate_checkout_time()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Ensure check_out is within 30 seconds of the server's current time
+    IF NEW.check_out IS NOT NULL AND OLD.check_out IS NULL THEN
+        IF NEW.check_out < now() - interval '30 seconds' OR NEW.check_out > now() + interval '30 seconds' THEN
+            RAISE EXCEPTION 'TAMPER_ALERT: check_out timestamp (%) is too far from server time (%)',
+                NEW.check_out, now();
+        END IF;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+CREATE TRIGGER enforce_checkout_server_time
+    BEFORE UPDATE ON public.attendance_logs
+    FOR EACH ROW EXECUTE FUNCTION public.validate_checkout_time();
+
 
 -- 4. Create Leave Requests Table
 CREATE TABLE public.leave_requests (
@@ -123,3 +150,21 @@ CREATE POLICY "Admins can approve or reject leave requests"
     ON public.leave_requests FOR UPDATE TO authenticated USING (
         EXISTS (SELECT 1 FROM public.users WHERE id = auth.uid() AND role = 'admin')
     );
+
+-- 8. Analytics RPCs
+CREATE OR REPLACE FUNCTION public.get_attendance_summary()
+RETURNS TABLE (
+    total_hours INT,
+    late_count INT,
+    total_logs INT
+) AS $$
+BEGIN
+    RETURN QUERY
+    SELECT 
+        COALESCE(SUM(duration_minutes), 0)::INT / 60 as total_hours,
+        COUNT(*) FILTER (WHERE status = 'late')::INT as late_count,
+        COUNT(*)::INT as total_logs
+    FROM public.attendance_logs;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+

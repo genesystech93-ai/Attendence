@@ -16,6 +16,7 @@ import { StatusBar } from 'expo-status-bar';
 import * as Location from 'expo-location';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { dataService, User, AttendanceLog, LeaveRequest, OfficeConfig } from './src/services/dataService';
+import { CalendarView } from './src/components/CalendarView';
 
 const { width } = Dimensions.get('window');
 
@@ -42,7 +43,7 @@ export default function App() {
   // App State
   const [dbInitialized, setDbInitialized] = useState(false);
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'leaves' | 'settings'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'leaves' | 'calendar' | 'settings'>('dashboard');
 
   // Real-time ticking Clock
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
@@ -62,7 +63,8 @@ export default function App() {
   const [realDistance, setRealDistance] = useState<number | null>(null);
 
   // Auth/Email Input
-  const [loginEmail, setLoginEmail] = useState('');
+  const [loginUsername, setLoginUsername] = useState('');
+  const [loginPassword, setLoginPassword] = useState('');
   const [loginError, setLoginError] = useState('');
 
   // Simulator configurations
@@ -137,6 +139,13 @@ export default function App() {
     }
   }, [currentCoords, officeConfig]);
 
+  const activeLogRef = useRef<AttendanceLog | null>(null);
+
+  // Sync ref to state
+  useEffect(() => {
+    activeLogRef.current = activeLog;
+  }, [activeLog]);
+
   // Fetch data on session state load
   useEffect(() => {
     if (currentUser) {
@@ -147,9 +156,7 @@ export default function App() {
       }
 
       timerRef.current = setInterval(() => {
-        const active = dataService.getActiveLog(currentUser.id);
-        setActiveLog(active);
-
+        const active = activeLogRef.current;
         if (active) {
           const checkInDate = new Date(active.checkIn);
           const diffMs = new Date().getTime() - checkInDate.getTime();
@@ -168,26 +175,41 @@ export default function App() {
     }
   }, [currentUser]);
 
-  const refreshData = () => {
+  const refreshData = async () => {
     if (!currentUser) return;
-    const config = dataService.getOfficeConfig();
-    setOfficeConfig(config);
+    try {
+      const config = await dataService.getOfficeConfig();
+      setOfficeConfig(config);
 
-    if (currentUser.role === 'admin') {
-      setAttendanceLogs(dataService.getAttendanceLogs());
-      setLeaveRequests(dataService.getLeaveRequests());
-    } else {
-      setAttendanceLogs(dataService.getAttendanceLogs(currentUser.id));
-      setLeaveRequests(dataService.getLeaveRequests(currentUser.id));
+      const active = await dataService.getActiveLog(currentUser.id);
+      setActiveLog(active);
+
+      if (currentUser.role === 'admin') {
+        const [logs, leaves] = await Promise.all([
+          dataService.getAttendanceLogs(),
+          dataService.getLeaveRequests()
+        ]);
+        setAttendanceLogs(logs);
+        setLeaveRequests(leaves);
+      } else {
+        const [logs, leaves] = await Promise.all([
+          dataService.getAttendanceLogs(currentUser.id),
+          dataService.getLeaveRequests(currentUser.id)
+        ]);
+        setAttendanceLogs(logs);
+        setLeaveRequests(leaves);
+      }
+    } catch (e) {
+      console.error("Failed to refresh mobile data", e);
     }
   };
 
-  const handleLogin = () => {
-    if (!loginEmail) {
-      setLoginError('Enter email address');
+  const handleLogin = async () => {
+    if (!loginUsername) {
+      setLoginError('Enter username');
       return;
     }
-    const { user, error } = dataService.login(loginEmail);
+    const { user, error } = await dataService.login(loginUsername, loginPassword);
     if (error) {
       setLoginError(error);
     } else {
@@ -196,10 +218,7 @@ export default function App() {
     }
   };
 
-  const handlePresetLogin = (email: string) => {
-    const { user } = dataService.login(email);
-    setCurrentUser(user);
-  };
+
 
   const handleLogout = () => {
     dataService.logout();
@@ -273,35 +292,47 @@ export default function App() {
       }
     }
 
-    // Write clock in log
-    dataService.checkIn(currentUser.id, checkInSSID, '192.168.1.189', {
-      lat: checkInLat,
-      lng: checkInLng,
-    });
-    refreshData();
-    Alert.alert('Success', 'Punch-in recorded successfully!');
+    try {
+      // Write clock in log
+      await dataService.checkIn(currentUser.id, checkInSSID, '192.168.1.189', {
+        lat: checkInLat,
+        lng: checkInLng,
+      });
+      await refreshData();
+      Alert.alert('Success', 'Punch-in recorded successfully!');
+    } catch (e: any) {
+      Alert.alert('Check-In Failed', e.message || 'Failed to record check in.');
+    }
   };
 
-  const handleCheckOut = () => {
+  const handleCheckOut = async () => {
     if (!currentUser) return;
-    dataService.checkOut(currentUser.id);
-    refreshData();
-    Alert.alert('Success', 'Clocked out. Great work today!');
+    try {
+      await dataService.checkOut(currentUser.id);
+      await refreshData();
+      Alert.alert('Success', 'Clocked out. Great work today!');
+    } catch (e: any) {
+      Alert.alert('Check-Out Failed', e.message || 'Failed to record check out.');
+    }
   };
 
-  const handleLeaveRequestSubmit = () => {
+  const handleLeaveRequestSubmit = async () => {
     if (!currentUser) return;
     if (!leaveStart || !leaveEnd || !leaveReason) {
       Alert.alert('Error', 'Please fill in all leave request inputs.');
       return;
     }
 
-    dataService.submitLeaveRequest(currentUser.id, leaveStart, leaveEnd, leaveType, leaveReason);
-    Alert.alert('Success', 'Leave request submitted to admin queue.');
-    setLeaveStart('');
-    setLeaveEnd('');
-    setLeaveReason('');
-    refreshData();
+    try {
+      await dataService.submitLeaveRequest(currentUser.id, leaveStart, leaveEnd, leaveType, leaveReason);
+      Alert.alert('Success', 'Leave request submitted to admin queue.');
+      setLeaveStart('');
+      setLeaveEnd('');
+      setLeaveReason('');
+      await refreshData();
+    } catch (e: any) {
+      Alert.alert('Submission Failed', e.message || 'Failed to submit leave request.');
+    }
   };
 
   const calculateHoursWorked = () => {
@@ -323,52 +354,36 @@ export default function App() {
     return (
       <View style={styles.loginContainer}>
         <StatusBar style="light" />
-        <View style={styles.logoCircle}>
-          <Text style={styles.logoText}>A</Text>
-        </View>
-        <Text style={styles.loginTitle}>Attendy Mobile</Text>
-        <Text style={styles.loginSubtitle}>Biometric Office Attendance Client</Text>
+        <Image source={require('./assets/icon.png')} style={styles.logoImage} />
+        <Text style={styles.loginTitle}>Genesoft Infotech</Text>
+        <Text style={styles.loginSubtitle}>Attendance Management System</Text>
 
         <View style={styles.cardGlass}>
-          <Text style={styles.label}>Corporate Email</Text>
+          <Text style={styles.label}>Username</Text>
           <TextInput
             style={styles.input}
-            placeholder="john@company.com"
+            placeholder="e.g. john"
             placeholderTextColor="#64748b"
-            value={loginEmail}
-            onChangeText={setLoginEmail}
+            value={loginUsername}
+            onChangeText={setLoginUsername}
             autoCapitalize="none"
-            keyboardType="email-address"
           />
+
+          <Text style={styles.label}>Password</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Enter password"
+            placeholderTextColor="#64748b"
+            value={loginPassword}
+            onChangeText={setLoginPassword}
+            autoCapitalize="none"
+            secureTextEntry={true}
+          />
+
           {loginError ? <Text style={styles.errorText}>{loginError}</Text> : null}
 
           <TouchableOpacity style={styles.btnPrimary} onPress={handleLogin}>
             <Text style={styles.btnText}>Authenticate Session</Text>
-          </TouchableOpacity>
-        </View>
-
-        {/* Quick Switch Profiles */}
-        <View style={styles.presetsBox}>
-          <Text style={styles.presetsTitle}>Quick Select Test Profiles</Text>
-          
-          <TouchableOpacity style={styles.presetRow} onPress={() => handlePresetLogin('john@company.com')}>
-            <View>
-              <Text style={styles.presetName}>John Doe (Employee)</Text>
-              <Text style={styles.presetEmail}>john@company.com</Text>
-            </View>
-            <View style={[styles.badge, styles.badgeEmployee]}>
-              <Text style={styles.badgeText}>Employee</Text>
-            </View>
-          </TouchableOpacity>
-
-          <TouchableOpacity style={styles.presetRow} onPress={() => handlePresetLogin('jane@company.com')}>
-            <View>
-              <Text style={styles.presetName}>Jane Smith (Employee)</Text>
-              <Text style={styles.presetEmail}>jane@company.com</Text>
-            </View>
-            <View style={[styles.badge, styles.badgeEmployee]}>
-              <Text style={styles.badgeText}>Employee</Text>
-            </View>
           </TouchableOpacity>
         </View>
       </View>
@@ -605,7 +620,7 @@ export default function App() {
                     style={styles.input}
                     value={simulatedSSID}
                     onChangeText={setSimulatedSSID}
-                    disabled={!!activeLog}
+                    editable={!activeLog}
                   />
 
                   <Text style={styles.label}>Simulated Latitude</Text>
@@ -614,7 +629,7 @@ export default function App() {
                     value={simulatedLat.toString()}
                     onChangeText={(val) => setSimulatedLat(parseFloat(val) || 0)}
                     keyboardType="numeric"
-                    disabled={!!activeLog}
+                    editable={!activeLog}
                   />
 
                   <Text style={styles.label}>Simulated Longitude</Text>
@@ -623,7 +638,7 @@ export default function App() {
                     value={simulatedLng.toString()}
                     onChangeText={(val) => setSimulatedLng(parseFloat(val) || 0)}
                     keyboardType="numeric"
-                    disabled={!!activeLog}
+                    editable={!activeLog}
                   />
 
                   <View style={styles.switchRow}>
@@ -649,6 +664,15 @@ export default function App() {
           </View>
         )}
 
+        {/* CALENDAR TAB */}
+        {activeTab === 'calendar' && (
+          <CalendarView 
+            logs={attendanceLogs}
+            holidays={officeConfig?.holidays || []}
+            currentUserId={currentUser.id}
+          />
+        )}
+
       </ScrollView>
 
       {/* BOTTOM TAB NAVIGATION */}
@@ -668,6 +692,15 @@ export default function App() {
         >
           <Text style={[styles.tabItemText, activeTab === 'leaves' ? styles.tabItemTextActive : null]}>
             Leaves
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          style={[styles.tabItem, activeTab === 'calendar' ? styles.tabItemActive : null]}
+          onPress={() => setActiveTab('calendar')}
+        >
+          <Text style={[styles.tabItemText, activeTab === 'calendar' ? styles.tabItemTextActive : null]}>
+            Calendar
           </Text>
         </TouchableOpacity>
 
@@ -698,19 +731,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 24,
   },
-  logoCircle: {
+  logoImage: {
     width: 64,
     height: 64,
-    borderRadius: 16,
-    backgroundColor: '#06b6d4',
-    alignItems: 'center',
-    justifyContent: 'center',
+    resizeMode: 'contain',
     marginBottom: 16,
-  },
-  logoText: {
-    fontSize: 32,
-    fontWeight: 'bold',
-    color: '#fff',
   },
   loginTitle: {
     fontSize: 24,

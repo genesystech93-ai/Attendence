@@ -1,0 +1,41 @@
+name: "Publish Desktop App"
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'desktop/**'
+
+jobs:
+  release:
+    runs-on: windows-latest
+
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: setup node
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: x86_64-pc-windows-msvc
+
+      - name: install dependencies (desktop)
+        run: npm install
+        working-directory: ./desktop
+
+      - name: build tauri desktop app
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: ./desktop
+          tagName: v__VERSION__
+          releaseName: "Genesoft Attendance v__VERSION__"
+          releaseBody: "See the assets to download the Windows Executable."
+          releaseDraft: true
+          prerelease: false

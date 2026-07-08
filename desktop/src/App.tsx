@@ -1,6 +1,10 @@
 import { useState, useEffect, useRef } from "react";
 import { dataService, User, AttendanceLog, LeaveRequest, OfficeConfig } from "./services/dataService";
+import { CalendarView } from "./components/CalendarView";
+import { AdminUserManagement } from "./components/AdminUserManagement";
 import "./App.css";
+import gtDarkLogo from "./assets/gt-dark.png";
+import gtIconLogo from "./assets/gt-icon.png";
 
 // Haversine formula to compute distance in meters between two points
 function getDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: number): number {
@@ -24,7 +28,7 @@ function getDistanceMeters(lat1: number, lon1: number, lat2: number, lon2: numbe
 function App() {
   // Navigation & User Session State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
-  const [activeTab, setActiveTab] = useState<"dashboard" | "leaves" | "admin">("dashboard");
+  const [activeTab, setActiveTab] = useState<"dashboard" | "leaves" | "calendar" | "admin">("dashboard");
   
   // Real-time ticking Clock
   const [currentTime, setCurrentTime] = useState<Date>(new Date());
@@ -37,9 +41,11 @@ function App() {
   const [attendanceLogs, setAttendanceLogs] = useState<AttendanceLog[]>([]);
   const [leaveRequests, setLeaveRequests] = useState<LeaveRequest[]>([]);
   const [officeConfig, setOfficeConfig] = useState<OfficeConfig | null>(null);
+  const [attendanceSummary, setAttendanceSummary] = useState({ totalHours: 0, lateCount: 0, totalLogs: 0 });
   
   // Login Form States
-  const [loginEmail, setLoginEmail] = useState("");
+  const [loginUsername, setLoginUsername] = useState("");
+  const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
 
   // Attendance Simulation States
@@ -63,18 +69,30 @@ function App() {
   const [adminOfficeLng, setAdminOfficeLng] = useState(77.5946);
   const [adminOfficeRadius, setAdminOfficeRadius] = useState(100);
   const [adminOfficeWifiRaw, setAdminOfficeWifiRaw] = useState("");
+  const [adminShiftStart, setAdminShiftStart] = useState("09:30:00");
+  const [adminShiftEnd, setAdminShiftEnd] = useState("18:30:00");
+  const [adminHolidaysRaw, setAdminHolidaysRaw] = useState("");
   const [adminSuccessMsg, setAdminSuccessMsg] = useState("");
 
   // Refs for tracking timer loops
   const timerRef = useRef<number | null>(null);
+  const activeLogRef = useRef<AttendanceLog | null>(null);
+
+  // Sync ref to state
+  useEffect(() => {
+    activeLogRef.current = activeLog;
+  }, [activeLog]);
 
   // Boot up initialization
   useEffect(() => {
-    dataService.initialize();
-    const user = dataService.getCurrentUser();
-    if (user) {
-      setCurrentUser(user);
-    }
+    const initApp = async () => {
+      dataService.initialize();
+      const user = dataService.getCurrentUser();
+      if (user) {
+        setCurrentUser(user);
+      }
+    };
+    initApp();
     
     // Ticking current date/time clock
     const clockInterval = setInterval(() => {
@@ -98,9 +116,7 @@ function App() {
       }
 
       timerRef.current = window.setInterval(() => {
-        const currentActive = dataService.getActiveLog(currentUser.id);
-        setActiveLog(currentActive);
-
+        const currentActive = activeLogRef.current;
         if (currentActive) {
           const checkInDate = new Date(currentActive.checkIn);
           const diffMs = new Date().getTime() - checkInDate.getTime();
@@ -119,35 +135,56 @@ function App() {
     }
   }, [currentUser]);
 
-  const refreshData = () => {
+  const refreshData = async () => {
     if (!currentUser) return;
-    const config = dataService.getOfficeConfig();
-    setOfficeConfig(config);
+    try {
+      const config = await dataService.getOfficeConfig();
+      setOfficeConfig(config);
 
-    // Seed admin fields
-    setAdminOfficeName(config.name);
-    setAdminOfficeLat(config.lat);
-    setAdminOfficeLng(config.lng);
-    setAdminOfficeRadius(config.geofenceRadius);
-    setAdminOfficeWifiRaw(config.allowedWifiSSIDs.join(", "));
+      // Seed admin fields
+      setAdminOfficeName(config.name);
+      setAdminOfficeLat(config.lat);
+      setAdminOfficeLng(config.lng);
+      setAdminOfficeRadius(config.geofenceRadius);
+      setAdminOfficeWifiRaw(config.allowedWifiSSIDs.join(", "));
+      setAdminShiftStart(config.shiftStartTime);
+      setAdminShiftEnd(config.shiftEndTime);
+      setAdminHolidaysRaw(config.holidays.join(", "));
 
-    // Attendance logs (for admin - see all; for employee - see own)
-    if (currentUser.role === "admin") {
-      setAttendanceLogs(dataService.getAttendanceLogs());
-      setLeaveRequests(dataService.getLeaveRequests());
-    } else {
-      setAttendanceLogs(dataService.getAttendanceLogs(currentUser.id));
-      setLeaveRequests(dataService.getLeaveRequests(currentUser.id));
+      // Fetch active log
+      const active = await dataService.getActiveLog(currentUser.id);
+      setActiveLog(active);
+
+      // Attendance logs (for admin - see all; for employee - see own)
+      if (currentUser.role === "admin") {
+        const [logs, leaves, summary] = await Promise.all([
+          dataService.getAttendanceLogs(),
+          dataService.getLeaveRequests(),
+          dataService.getAttendanceSummary()
+        ]);
+        setAttendanceLogs(logs);
+        setLeaveRequests(leaves);
+        setAttendanceSummary(summary);
+      } else {
+        const [logs, leaves] = await Promise.all([
+          dataService.getAttendanceLogs(currentUser.id),
+          dataService.getLeaveRequests(currentUser.id)
+        ]);
+        setAttendanceLogs(logs);
+        setLeaveRequests(leaves);
+      }
+    } catch (e) {
+      console.error("Failed to refresh dashboard data", e);
     }
   };
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!loginEmail) {
-      setLoginError("Please enter your email");
+    if (!loginUsername) {
+      setLoginError("Please enter your username");
       return;
     }
-    const { user, error } = dataService.login(loginEmail);
+    const { user, error } = await dataService.login(loginUsername, loginPassword);
     if (error) {
       setLoginError(error);
     } else {
@@ -157,12 +194,7 @@ function App() {
     }
   };
 
-  const handlePresetLogin = (email: string) => {
-    const { user } = dataService.login(email);
-    setLoginError("");
-    setCurrentUser(user);
-    setActiveTab("dashboard");
-  };
+
 
   const handleLogout = () => {
     dataService.logout();
@@ -170,7 +202,7 @@ function App() {
   };
 
   // Perform Check In with security validation
-  const handleCheckIn = () => {
+  const handleCheckIn = async () => {
     if (!currentUser || !officeConfig) return;
     setClockError(null);
 
@@ -203,81 +235,98 @@ function App() {
       }
     }
 
-    // Success - trigger write
-    dataService.checkIn(
-      currentUser.id,
-      simulatedSSID,
-      simulatedIP,
-      { lat: simulatedLat, lng: simulatedLng }
-    );
-    refreshData();
+    try {
+      // Success - trigger write
+      await dataService.checkIn(
+        currentUser.id,
+        simulatedSSID,
+        simulatedIP,
+        { lat: simulatedLat, lng: simulatedLng }
+      );
+      await refreshData();
+    } catch (e: any) {
+      setClockError(e.message || "Failed to check in.");
+    }
   };
 
   // Handle Checkout
-  const handleCheckOut = () => {
+  const handleCheckOut = async () => {
     if (!currentUser) return;
-    dataService.checkOut(currentUser.id);
-    refreshData();
+    try {
+      await dataService.checkOut(currentUser.id);
+      await refreshData();
+    } catch (e: any) {
+      setClockError(e.message || "Failed to check out.");
+    }
   };
 
   // Handle Submit Leave Request
-  const handleLeaveSubmit = (e: React.FormEvent) => {
+  const handleLeaveSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentUser) return;
     if (!leaveStart || !leaveEnd || !leaveReason) {
       return;
     }
 
-    dataService.submitLeaveRequest(
-      currentUser.id,
-      leaveStart,
-      leaveEnd,
-      leaveType,
-      leaveReason
-    );
-    setLeaveSuccess(true);
-    setLeaveStart("");
-    setLeaveEnd("");
-    setLeaveReason("");
-    refreshData();
+    try {
+      await dataService.submitLeaveRequest(
+        currentUser.id,
+        leaveStart,
+        leaveEnd,
+        leaveType,
+        leaveReason
+      );
+      setLeaveSuccess(true);
+      setLeaveStart("");
+      setLeaveEnd("");
+      setLeaveReason("");
+      await refreshData();
 
-    setTimeout(() => {
-      setLeaveSuccess(false);
-    }, 4000);
+      setTimeout(() => {
+        setLeaveSuccess(false);
+      }, 4000);
+    } catch (e) {
+      console.error("Failed to submit leave", e);
+    }
   };
 
   // Admin: update config
-  const handleSaveOfficeConfig = (e: React.FormEvent) => {
+  const handleSaveOfficeConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     if (currentUser?.role !== "admin") return;
 
-    const ssids = adminOfficeWifiRaw
-      .split(",")
-      .map((s) => s.trim())
-      .filter((s) => s.length > 0);
+    try {
+      await dataService.updateOfficeConfig({
+        id: officeConfig?.id || 'off-1',
+        name: adminOfficeName,
+        lat: adminOfficeLat,
+        lng: adminOfficeLng,
+        geofenceRadius: adminOfficeRadius,
+        allowedWifiSSIDs: adminOfficeWifiRaw.split(',').map(s => s.trim()).filter(s => s),
+        shiftStartTime: adminShiftStart,
+        shiftEndTime: adminShiftEnd,
+        holidays: adminHolidaysRaw.split(',').map(s => s.trim()).filter(s => s)
+      });
+      setAdminSuccessMsg("Settings saved successfully.");
+      setTimeout(() => setAdminSuccessMsg(""), 3000);
+      refreshData();
+    } catch (e: any) {
+      alert("Error saving: " + e.message);
+    }
+  };
 
-    const newConfig: OfficeConfig = {
-      id: officeConfig?.id || "off-1",
-      name: adminOfficeName,
-      lat: adminOfficeLat,
-      lng: adminOfficeLng,
-      geofenceRadius: adminOfficeRadius,
-      allowedWifiSSIDs: ssids,
-    };
-
-    dataService.updateOfficeConfig(newConfig);
-    setAdminSuccessMsg("Office configuration saved successfully!");
-    refreshData();
-
-    setTimeout(() => {
-      setAdminSuccessMsg("");
-    }, 4000);
+  const handleDownloadCSV = () => {
+    dataService.exportToCSV(attendanceLogs);
   };
 
   // Admin: Approve/Reject Leave requests
-  const handleLeaveStatusUpdate = (id: string, status: "approved" | "rejected") => {
-    dataService.updateLeaveRequestStatus(id, status);
-    refreshData();
+  const handleLeaveStatusUpdate = async (id: string, status: "approved" | "rejected") => {
+    try {
+      await dataService.updateLeaveRequestStatus(id, status);
+      await refreshData();
+    } catch (e) {
+      console.error("Failed to update leave status", e);
+    }
   };
 
   // Calculations for stats dashboard cards
@@ -351,55 +400,38 @@ function App() {
     return (
       <div className="login-container">
         <div className="login-card glass-panel fade-in">
-          <div className="login-logo">A</div>
-          <h2>Attendy Desktop</h2>
+          <img src={gtIconLogo} alt="Genesoft Infotech" className="login-logo" />
+          <h2>Genesoft Infotech</h2>
           <p>Sign in using employee email credentials to check in</p>
           
           <form onSubmit={handleLogin}>
             <div className="form-group" style={{ marginBottom: "16px", textAlign: "left" }}>
-              <label>Office Email Address</label>
+              <label>Username</label>
               <input
-                type="email"
+                type="text"
                 className="form-input"
-                placeholder="email@company.com"
-                value={loginEmail}
-                onChange={(e) => setLoginEmail(e.target.value)}
+                placeholder="Enter username"
+                value={loginUsername}
+                onChange={(e) => setLoginUsername(e.target.value)}
               />
-              {loginError && <span className="error-text">{loginError}</span>}
+            </div>
+            
+            <div className="form-group" style={{ marginBottom: "16px", textAlign: "left" }}>
+              <label>Password</label>
+              <input
+                type="password"
+                className="form-input"
+                placeholder="Enter password"
+                value={loginPassword}
+                onChange={(e) => setLoginPassword(e.target.value)}
+              />
+              {loginError && <span className="error-text" style={{ marginTop: "8px", display: "block" }}>{loginError}</span>}
             </div>
             
             <button type="submit" className="btn-primary" style={{ width: "100%", marginTop: "8px" }}>
-              Sign In
+              Secure Login
             </button>
           </form>
-
-          <div className="presets-box">
-            <div className="presets-title">Quick Switch / Simulator Profiles</div>
-            
-            <div className="preset-badge" onClick={() => handlePresetLogin("admin@company.com")}>
-              <div>
-                <div className="preset-name">Sophia Miller</div>
-                <div className="preset-email">admin@company.com</div>
-              </div>
-              <span className="badge present" style={{ fontSize: "0.65rem" }}>Admin</span>
-            </div>
-
-            <div className="preset-badge" onClick={() => handlePresetLogin("john@company.com")}>
-              <div>
-                <div className="preset-name">John Doe</div>
-                <div className="preset-email">john@company.com</div>
-              </div>
-              <span className="badge half_day" style={{ fontSize: "0.65rem" }}>Employee</span>
-            </div>
-
-            <div className="preset-badge" onClick={() => handlePresetLogin("jane@company.com")}>
-              <div>
-                <div className="preset-name">Jane Smith</div>
-                <div className="preset-email">jane@company.com</div>
-              </div>
-              <span className="badge half_day" style={{ fontSize: "0.65rem" }}>Employee</span>
-            </div>
-          </div>
         </div>
       </div>
     );
@@ -412,8 +444,7 @@ function App() {
       <div className="sidebar glass-panel">
         <div>
           <div className="brand-section">
-            <div className="brand-logo">A</div>
-            <div className="brand-name">Attendy OS</div>
+            <img src={gtDarkLogo} alt="Genesoft Infotech" className="brand-logo" />
           </div>
           
           <div className="nav-menu">
@@ -431,6 +462,14 @@ function App() {
             >
               {icons.leaves}
               <span>My Leaves</span>
+            </div>
+
+            <div
+              className={`nav-item ${activeTab === "calendar" ? "active" : ""}`}
+              onClick={() => setActiveTab("calendar")}
+            >
+              {icons.clock}
+              <span>Calendar</span>
             </div>
 
             {currentUser.role === "admin" && (
@@ -675,6 +714,16 @@ function App() {
           </div>
         )}
 
+        {/* Calendar Tab */}
+        {activeTab === "calendar" && (
+          <CalendarView 
+            logs={attendanceLogs}
+            holidays={officeConfig?.holidays || []}
+            isAdmin={currentUser.role === 'admin'}
+            currentUserId={currentUser.id}
+          />
+        )}
+
         {/* Leaves Tab */}
         {activeTab === "leaves" && (
           <div className="fade-in leaves-grid">
@@ -791,10 +840,54 @@ function App() {
 
         {/* Admin Tab (Protected) */}
         {activeTab === "admin" && currentUser.role === "admin" && (
-          <div className="fade-in admin-grid">
-            <div className="admin-header-row">
-              {/* Geofence and Configuration Settings */}
-              <div className="glass-panel" style={{ padding: "24px" }}>
+          <div className="fade-in" style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            
+            {/* Analytics Dashboard */}
+            <div className="glass-panel" style={{ padding: "24px" }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+                <h3 style={{ margin: 0, fontSize: "1.1rem" }}>Workforce Analytics</h3>
+                <button className="btn-primary" onClick={handleDownloadCSV} style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+                  Download CSV Report
+                </button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '16px' }}>
+                <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(139, 92, 246, 0.15)', color: '#8b5cf6' }}>
+                    {icons.clock}
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{attendanceSummary.totalHours} hrs</div>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Total Hours Logged</div>
+                  </div>
+                </div>
+                <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{attendanceSummary.lateCount}</div>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Late Check-Ins</div>
+                  </div>
+                </div>
+                <div className="glass-panel" style={{ padding: '20px', display: 'flex', alignItems: 'center', gap: '16px' }}>
+                  <div style={{ padding: '12px', borderRadius: '12px', background: 'rgba(6, 182, 212, 0.15)', color: '#06b6d4' }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '1.5rem', fontWeight: 'bold' }}>{attendanceSummary.totalLogs}</div>
+                    <div style={{ fontSize: '0.85rem', color: '#64748b' }}>Total Check-Ins</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="admin-grid">
+              <AdminUserManagement />
+              
+              <div className="admin-header-row">
+                {/* Geofence and Configuration Settings */}
+                <div className="glass-panel" style={{ padding: "24px" }}>
                 <h3 style={{ margin: "0 0 16px 0", fontSize: "1.1rem" }}>Office Location Configurations</h3>
                 <form onSubmit={handleSaveOfficeConfig} style={{ display: "flex", flexDirection: "column", gap: "16px" }}>
                   
@@ -858,6 +951,42 @@ function App() {
                         required
                       />
                     </div>
+                  </div>
+
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                    <div className="form-group">
+                      <label>Shift Start Time (HH:mm:ss)</label>
+                      <input 
+                        type="time" 
+                        step="1"
+                        className="form-input" 
+                        value={adminShiftStart}
+                        onChange={(e) => setAdminShiftStart(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Shift End Time (HH:mm:ss)</label>
+                      <input 
+                        type="time" 
+                        step="1"
+                        className="form-input" 
+                        value={adminShiftEnd}
+                        onChange={(e) => setAdminShiftEnd(e.target.value)}
+                        required
+                      />
+                    </div>
+                  </div>
+                  
+                  <div className="form-group">
+                    <label>Holidays (comma separated YYYY-MM-DD)</label>
+                    <input 
+                      type="text" 
+                      className="form-input" 
+                      value={adminHolidaysRaw}
+                      onChange={(e) => setAdminHolidaysRaw(e.target.value)}
+                      placeholder="2026-12-25, 2026-01-01"
+                    />
                   </div>
 
                   <button type="submit" className="btn-primary">
@@ -929,6 +1058,7 @@ function App() {
                 </div>
               </div>
             </div>
+          </div>
           </div>
         )}
       </div>
