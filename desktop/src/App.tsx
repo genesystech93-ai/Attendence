@@ -71,6 +71,7 @@ function App() {
   const [adminOfficeWifiRaw, setAdminOfficeWifiRaw] = useState("");
   const [adminShiftStart, setAdminShiftStart] = useState("09:30:00");
   const [adminShiftEnd, setAdminShiftEnd] = useState("18:30:00");
+  const [adminAutoCheckout, setAdminAutoCheckout] = useState("20:00:00");
   const [adminHolidaysRaw, setAdminHolidaysRaw] = useState("");
   const [adminSuccessMsg, setAdminSuccessMsg] = useState("");
 
@@ -149,6 +150,7 @@ function App() {
       setAdminOfficeWifiRaw(config.allowedWifiSSIDs.join(", "));
       setAdminShiftStart(config.shiftStartTime);
       setAdminShiftEnd(config.shiftEndTime);
+      setAdminAutoCheckout(config.autoCheckoutTime || "20:00:00");
       setAdminHolidaysRaw(config.holidays.join(", "));
 
       // Fetch active log
@@ -157,6 +159,7 @@ function App() {
 
       // Attendance logs (for admin - see all; for employee - see own)
       if (currentUser.role === "admin") {
+        await dataService.runAutoCheckout();
         const [logs, leaves, summary] = await Promise.all([
           dataService.getAttendanceLogs(),
           dataService.getLeaveRequests(),
@@ -305,6 +308,7 @@ function App() {
         allowedWifiSSIDs: adminOfficeWifiRaw.split(',').map(s => s.trim()).filter(s => s),
         shiftStartTime: adminShiftStart,
         shiftEndTime: adminShiftEnd,
+        autoCheckoutTime: adminAutoCheckout,
         holidays: adminHolidaysRaw.split(',').map(s => s.trim()).filter(s => s)
       });
       setAdminSuccessMsg("Settings saved successfully.");
@@ -953,7 +957,7 @@ function App() {
                     </div>
                   </div>
 
-                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "12px" }}>
+                  <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: "12px" }}>
                     <div className="form-group">
                       <label>Shift Start Time (HH:mm:ss)</label>
                       <input 
@@ -973,6 +977,17 @@ function App() {
                         className="form-input" 
                         value={adminShiftEnd}
                         onChange={(e) => setAdminShiftEnd(e.target.value)}
+                        required
+                      />
+                    </div>
+                    <div className="form-group">
+                      <label>Auto Checkout (HH:mm:ss)</label>
+                      <input 
+                        type="time" 
+                        step="1"
+                        className="form-input" 
+                        value={adminAutoCheckout}
+                        onChange={(e) => setAdminAutoCheckout(e.target.value)}
                         required
                       />
                     </div>

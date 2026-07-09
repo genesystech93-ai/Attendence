@@ -42,6 +42,7 @@ export interface OfficeConfig {
   allowedWifiSSIDs: string[];
   shiftStartTime: string; // HH:mm:ss
   shiftEndTime: string; // HH:mm:ss
+  autoCheckoutTime?: string; // HH:mm:ss
   holidays: string[]; // YYYY-MM-DD
 }
 
@@ -167,6 +168,7 @@ const DEFAULT_OFFICE: OfficeConfig = {
   allowedWifiSSIDs: ['Office_HighSpeed', 'Office_Guest'],
   shiftStartTime: '09:30:00',
   shiftEndTime: '18:30:00',
+  autoCheckoutTime: '20:00:00',
   holidays: ['2026-12-25', '2026-01-01']
 };
 
@@ -664,6 +666,7 @@ export const dataService = {
         allowedWifiSSIDs: data[0].allowed_wifi_ssids,
         shiftStartTime: data[0].shift_start_time || '09:30:00',
         shiftEndTime: data[0].shift_end_time || '18:30:00',
+        autoCheckoutTime: data[0].auto_checkout_time || '20:00:00',
         holidays: data[0].holidays || []
       };
     } else {
@@ -685,6 +688,7 @@ export const dataService = {
           allowed_wifi_ssids: config.allowedWifiSSIDs,
           shift_start_time: config.shiftStartTime,
           shift_end_time: config.shiftEndTime,
+          auto_checkout_time: config.autoCheckoutTime,
           holidays: config.holidays
         });
       if (error) throw error;
@@ -720,6 +724,17 @@ export const dataService = {
         lateCount,
         totalLogs: logs.length
       };
+    }
+  },
+
+  async runAutoCheckout(): Promise<void> {
+    if (supabase) {
+      const { error } = await supabase.rpc('run_auto_checkout');
+      if (error) {
+        console.error("Auto-checkout RPC Error:", error);
+      } else {
+        console.log("Auto-checkout run successfully.");
+      }
     }
   },
 
