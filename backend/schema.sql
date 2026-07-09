@@ -242,11 +242,11 @@ CREATE OR REPLACE TRIGGER on_auth_user_created
     AFTER INSERT ON auth.users
     FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
--- 6. Enable Row-Level Security (RLS) on all Tables
-ALTER TABLE public.offices ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.attendance_logs ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.leave_requests ENABLE ROW LEVEL SECURITY;
+-- 6. Disable Row-Level Security (RLS) on all Tables (since we use custom auth)
+ALTER TABLE public.offices DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.attendance_logs DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.leave_requests DISABLE ROW LEVEL SECURITY;
 
 -- 7. Define RLS Policies
 

@@ -602,8 +602,56 @@ export default function App() {
           </View>
         )}
 
-        {/* SETTINGS / SIMULATOR TAB */}
-        {activeTab === 'settings' && (
+        {/* ADMIN TAB (Admin Only) */}
+        {activeTab === 'admin' && currentUser.role === 'admin' && (
+          <View>
+            <View style={styles.cardGlass}>
+              <Text style={styles.cardHeaderTitle}>Pending Leave Approvals</Text>
+              {leaveRequests.filter(r => r.status === 'pending').length === 0 ? (
+                <Text style={styles.emptyText}>No pending leaves.</Text>
+              ) : (
+                leaveRequests.filter(r => r.status === 'pending').map(req => (
+                  <View key={req.id} style={styles.logItem}>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.logDate}>{req.userName}</Text>
+                      <Text style={styles.logTime}>{req.startDate} to {req.endDate} ({req.type})</Text>
+                      <Text style={[styles.logTime, { color: '#94a3b8' }]}>{req.reason}</Text>
+                    </View>
+                    <View style={{ flexDirection: 'row', gap: 8 }}>
+                      <TouchableOpacity 
+                        style={[styles.badge, styles.badgePresent]} 
+                        onPress={async () => {
+                          try {
+                            await dataService.updateLeaveRequestStatus(req.id, 'approved');
+                            await refreshData();
+                            Alert.alert('Success', 'Leave Approved');
+                          } catch (e: any) { Alert.alert('Error', e.message); }
+                        }}
+                      >
+                        <Text style={{ color: '#34d399', fontWeight: 'bold' }}>✓</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity 
+                        style={[styles.badge, styles.badgeLate]} 
+                        onPress={async () => {
+                          try {
+                            await dataService.updateLeaveRequestStatus(req.id, 'rejected');
+                            await refreshData();
+                            Alert.alert('Success', 'Leave Rejected');
+                          } catch (e: any) { Alert.alert('Error', e.message); }
+                        }}
+                      >
+                        <Text style={{ color: '#ef4444', fontWeight: 'bold' }}>✕</Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+                ))
+              )}
+            </View>
+          </View>
+        )}
+
+        {/* SETTINGS / SIMULATOR TAB (Admin Only) */}
+        {activeTab === 'settings' && currentUser.role === 'admin' && (
           <View>
             <View style={styles.cardGlass}>
               <Text style={styles.cardHeaderTitle}>Device Sensors Configuration</Text>
@@ -711,14 +759,27 @@ export default function App() {
           </Text>
         </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.tabItem, activeTab === 'settings' ? styles.tabItemActive : null]}
-          onPress={() => setActiveTab('settings')}
-        >
-          <Text style={[styles.tabItemText, activeTab === 'settings' ? styles.tabItemTextActive : null]}>
-            Sensors
-          </Text>
-        </TouchableOpacity>
+        {currentUser.role === 'admin' && (
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'admin' ? styles.tabItemActive : null]}
+            onPress={() => setActiveTab('admin')}
+          >
+            <Text style={[styles.tabItemText, activeTab === 'admin' ? styles.tabItemTextActive : null]}>
+              Admin
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        {currentUser.role === 'admin' && (
+          <TouchableOpacity
+            style={[styles.tabItem, activeTab === 'settings' ? styles.tabItemActive : null]}
+            onPress={() => setActiveTab('settings')}
+          >
+            <Text style={[styles.tabItemText, activeTab === 'settings' ? styles.tabItemTextActive : null]}>
+              Sensors
+            </Text>
+          </TouchableOpacity>
+        )}
       </View>
     </View>
   );

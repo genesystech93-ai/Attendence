@@ -804,3 +804,85 @@ tr:hover td {
 .cal-dot.late { background-color: #facc15; box-shadow: 0 0 6px rgba(250, 204, 21, 0.6); }
 .cal-dot.absent { background-color: #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.6); }
 .cal-dot.holiday { background-color: #a855f7; box-shadow: 0 0 6px rgba(168, 85, 247, 0.6); }
+
+/* =========================================
+   Mobile Responsiveness & Media Queries
+   ========================================= */
+@media (max-width: 768px) {
+  .app-container {
+    flex-direction: column;
+    height: 100vh;
+    overflow: hidden;
+  }
+
+  .sidebar {
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    padding: 10px 12px;
+    border-right: none;
+    border-bottom: none;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+    order: 2; /* Move navbar to the bottom of the screen */
+    background: rgba(15, 23, 42, 0.95);
+    z-index: 100;
+  }
+
+  .brand-section {
+    display: none; /* Hide logo on mobile to save space */
+  }
+
+  .nav-menu {
+    flex-direction: row;
+    justify-content: space-around;
+    width: 100%;
+    gap: 0;
+  }
+
+  .nav-item {
+    padding: 8px 12px;
+    flex-direction: column;
+    gap: 4px;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+  }
+
+  .nav-item span {
+    font-size: 0.65rem;
+  }
+
+  .main-content {
+    order: 1;
+    padding: 16px;
+    height: calc(100vh - 68px); /* Account for bottom tab bar */
+    padding-bottom: 24px;
+  }
+
+  .dashboard-grid, .admin-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .content-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+
+  .live-clock-badge {
+    align-self: flex-start;
+  }
+
+  .user-profile-badge {
+    display: none; /* Hide profile block in bottom bar, let them use logout button in settings if needed, or we keep just logout */
+  }
+
+  .sidebar {
+    justify-content: center;
+  }
+
+  /* Admin Analytics stack */
+  .admin-grid > div > div > div {
+    grid-template-columns: 1fr !important; 
+  }
+}
