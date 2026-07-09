@@ -107,6 +107,13 @@ export default function App() {
         Location.watchPositionAsync(
           { accuracy: Location.Accuracy.Balanced, timeInterval: 15000, distanceInterval: 10 },
           (location) => {
+            if (location.mocked) {
+              setGpsErrorMsg('Fake GPS / Mock Location detected. Please disable it to clock in.');
+              setCurrentCoords(null);
+              return;
+            } else {
+              setGpsErrorMsg(null);
+            }
             const coords = { lat: location.coords.latitude, lng: location.coords.longitude };
             setCurrentCoords(coords);
           }

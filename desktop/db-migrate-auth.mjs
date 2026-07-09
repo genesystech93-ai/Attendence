@@ -16,28 +16,19 @@ async function migrate() {
       -- Give ID a default uuid generator since it no longer inherits from auth.users
       ALTER TABLE public.users ALTER COLUMN id SET DEFAULT gen_random_uuid();
       
-      -- Rename email to username
-      DO $$
-      BEGIN
-        IF EXISTS(SELECT *
-          FROM information_schema.columns
-          WHERE table_name='users' and column_name='email')
-        THEN
-            ALTER TABLE public.users RENAME COLUMN email TO username;
-        END IF;
-      END $$;
-
       -- Add password column
       ALTER TABLE public.users ADD COLUMN IF NOT EXISTS password TEXT NOT NULL DEFAULT 'password123';
 
-      -- Clear old data to prevent conflicts
-      DELETE FROM public.attendance_logs;
-      DELETE FROM public.leave_requests;
-      DELETE FROM public.users;
-
-      -- Insert permanent Admin user
+      -- Ensure genesoft exists
       INSERT INTO public.users (username, full_name, role, password) 
-      VALUES ('genesoft', 'Super Admin', 'admin', 'SURAJmagar@9890');
+      VALUES ('genesoft', 'Super Admin', 'admin', 'SURAJmagar@9890')
+      ON CONFLICT (username) DO UPDATE SET password = EXCLUDED.password;
+
+      -- Disable RLS so anonymous web clients can query and mutate tables
+      ALTER TABLE public.users DISABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.offices DISABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.attendance_logs DISABLE ROW LEVEL SECURITY;
+      ALTER TABLE public.leave_requests DISABLE ROW LEVEL SECURITY;
     `;
 
     console.log("Applying auth migration...");
